@@ -8,7 +8,7 @@ pygame.font.init()
 font = pygame.font.SysFont("comicsansms", 20)
 
 class Obstacle:
-    def __init__(self, surface, seed, hauteur: int=120) -> None:
+    def __init__(self, surface, seed, hauteur: int = 120) -> None:
         self.surface = surface
         height = surface.get_height()
         self.init_x = surface.get_width() + 50
@@ -25,16 +25,16 @@ class Obstacle:
     def draw(self):
         pygame.draw.rect(self.surface, self.color, self.rect_up)
         pygame.draw.rect(self.surface, self.color, self.rect_down)
-    
+
     def update(self):
         self.rect_up.x -= self.speed
         self.rect_down.x -= self.speed
+
 
 class GestionObstacle:
     def __init__(self, surface):
         self.list_obstacles = []
         self.counter = 50
-
         self.surface = surface
 
     def init_seed(self):
@@ -50,14 +50,15 @@ class GestionObstacle:
             self.counter = 0
             self.list_obstacles.append(Obstacle(self.surface, self.seed))
         self.clean_obstacles()
-    
+
     def draw(self):
         for obstacle in self.list_obstacles:
             obstacle.draw()
-    
+
     def clean_obstacles(self):
         if len(self.list_obstacles) > 0 and self.list_obstacles[0].rect_up.x < -50:
             self.list_obstacles.pop(0)
+
 
 class Bird:
     def __init__(self, surface, game):
@@ -91,13 +92,13 @@ class Bird:
     def check_limit(self):
         if self.rect.y + self.width_bird - 20 > self.surface.get_height() or self.rect.y - self.width_bird + 20 < 0:
             self.on_life = False
-    
+
     def draw(self):
         pygame.draw.rect(self.surface, self.color, self.rect)
 
     def jump(self):
         self.v_chute = -self.jump_height
-    
+
     def dead(self):
         self.on_life = False
 
@@ -113,21 +114,22 @@ class Bird:
             else:
                 self.parametre[index] = value
         if random.random() <= self.mutation_pourcentage:
-                self.bias = self.bias + random.uniform(-self.mutation_evolution * 1000, self.mutation_evolution * 1000) / 1000
+            self.bias = self.bias + random.uniform(-self.mutation_evolution * 1000, self.mutation_evolution * 1000) / 1000
 
     def calcul(self):
         if self.game.next_mur is None:
             return 0
         distance_sol = self.surface.get_height() - self.rect.y
-        distance_haut_gauche = self.distance_two_tuple(self.game.next_mur.rect_up.bottomleft, self.rect.center)
-        distance_bas_gauche  = self.distance_two_tuple(self.game.next_mur.rect_down.topleft, self.rect.center)
-        return self.v_chute * self.parametre[0]  +  distance_sol * self.parametre[1]  +  distance_haut_gauche * self.parametre[2]  +  distance_bas_gauche * self.parametre[3]  +  self.bias
+        distance_haut_gauche = Bird.distance_two_tuple(self.game.next_mur.rect_up.bottomleft, self.rect.center)
+        distance_bas_gauche = Bird.distance_two_tuple(self.game.next_mur.rect_down.topleft, self.rect.center)
+        return self.v_chute * self.parametre[0] + distance_sol * self.parametre[1] + distance_haut_gauche * self.parametre[2] + distance_bas_gauche * self.parametre[3] + self.bias
 
-    def distance_two_tuple(self, tuple1, tuple2):
+    @staticmethod
+    def distance_two_tuple(tuple1, tuple2):
         diff_x = tuple1[0] - tuple2[0]
         diff_y = tuple1[1] - tuple2[1]
 
-        total = sqrt(diff_x**2 + diff_y ** 2)
+        total = sqrt(diff_x**2 + diff_y**2)
 
         if tuple1[1] - tuple2[1] < 0:
             total = -total
@@ -144,38 +146,53 @@ class Bird:
 class GestionBird:
     def __init__(self, surface, game):
         self.nbr_bird = 1000
-
         self.tout_mes_bird = [Bird(surface, game) for i in range(self.nbr_bird)]
         self.first_assignation()
 
         self.game = game
         self.surface = surface
 
+        self.never_create = True
+
+        self.best = None
+        self.copie = self.tout_mes_bird.copy()
+
     def first_assignation(self):
         for bird in self.tout_mes_bird:
             bird.first_assignation()
-    
+
     def mutation(self):
+        if self.best is None:
+            return
+        
+        if self.never_create:
+            self.never_create = False
+            self.tout_mes_bird = [Bird(self.surface, self.game) for i in range(self.nbr_bird)]
+            self.first_assignation()
+
         self.tout_mes_bird = [Bird(self.surface, self.game) for i in range(self.nbr_bird)]
         for bird in self.tout_mes_bird:
             bird.mutation(self.best.parametre, self.best.bias)
-    
+
     def update(self):
         for bird in self.tout_mes_bird:
             bird.update()
-        
+
         self.tout_mes_bird = [instance for instance in self.tout_mes_bird if instance.on_life != 0]
-        
+
         if len(self.tout_mes_bird) == 0:
-            self.best = self.copie[0]
+            self.best = self.copie[0] if self.copie else None
             self.game.loop_ = False
 
         if len(self.tout_mes_bird) != 0:
-            self.copie = self.tout_mes_bird
-        
+            self.copie = self.tout_mes_bird.copy()
+
     def draw(self):
         for bird in self.tout_mes_bird:
             bird.draw()
+
+
+
 
 class Game:
     def __init__(self, generation):
@@ -190,7 +207,8 @@ class Game:
         self.loop_ = True
 
         self.fps = 30
-        
+        self.croix = False
+
         self.generation = generation
 
     def loop(self):
@@ -203,16 +221,16 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.loop_ = False
+                    self.croix = True
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_m:
                         self.fps -= 5
                     elif event.key == pygame.K_p:
                         self.fps += 5
-            
+
             self.gestion_obstacles.update()
             self.GestionBird.update()
             self.update()
-
 
             self.window.fill(pygame.Color(0, 200, 255))
 
@@ -221,11 +239,14 @@ class Game:
             self.draw_stat()
 
             pygame.display.flip()
-            self.clock.tick(self.fps)        
+            self.clock.tick(self.fps)
+        if self.croix:
+            self.quit()
+        return self.croix
 
     def quit(self):
         pygame.quit()
-    
+
     def update(self):
         self.next_obstacle()
         self.collision()
@@ -239,54 +260,51 @@ class Game:
                     if self.copie is None:
                         self.copie = self.next_mur
                     break
-    
+
     def check_point(self):
         if self.copie is not None:
             if self.copie != self.next_mur:
                 self.copie = self.next_mur
-                self.POINT +=1
-    
+                self.POINT += 1
+
     def draw_stat(self):
         text = "Point : " + str(self.POINT)
-        text = font.render(text, True,(255, 255, 255))
+        text = font.render(text, True, (255, 255, 255))
         self.window.blit(text, (20, 20))
 
         text = "Génération : " + str(self.generation)
-        text = font.render(str(text), True,(255, 255, 255))
+        text = font.render(str(text), True, (255, 255, 255))
         self.window.blit(text, (20, 40))
-    
-        text = "bird en vie : " + str(len(self.GestionBird.tout_mes_bird))
-        text = font.render(str(text), True,(255, 255, 255))
+
+        text = "Bird en vie : " + str(len(self.GestionBird.tout_mes_bird))
+        text = font.render(str(text), True, (255, 255, 255))
         self.window.blit(text, (20, 60))
-    
+
     def collision(self):
         if self.next_mur is not None:
             for bird in self.GestionBird.tout_mes_bird:
                 if bird.rect.colliderect(self.next_mur.rect_up) or bird.rect.colliderect(self.next_mur.rect_down):
                     bird.dead()
-
-
 class Train_model:
     def __init__(self, nbr_learn) -> None:
         self.nrb_learn = nbr_learn - 1
-        self.nbr_generation = 1
+        self.nbr_generation = 0
         self.game = Game(self.nbr_generation)
 
-        self.game.loop()
-        self.game.generation += 1
-
-        print("parametre : " + str(self.game.GestionBird.best.parametre))
-        print("bias : " + str(self.game.GestionBird.best.bias))
-    
     def train(self):
         for i in range(self.nrb_learn):
             self.game.generation += 1
             self.game.GestionBird.mutation()
             self.game.gestion_obstacles.init_seed()
-            self.game.loop()
+            if self.game.loop():
+                print("programme intérrompu")
+                return 
 
-            print("parametre : " + str(self.game.GestionBird.best.parametre))
-            print("bias : " + str(self.game.GestionBird.best.bias))
+            if self.game.GestionBird.best is not None:
+                print("parametre : " + str(self.game.GestionBird.best.parametre))
+                print("bias : " + str(self.game.GestionBird.best.bias))
+            else:
+                print("Aucun oiseau selectionné comme meilleur (erreur dans le code)")
 
 model = Train_model(100)
 model.train()
